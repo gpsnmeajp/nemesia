@@ -32,6 +32,8 @@ class MyApp extends StatelessWidget {
 }
 
 class ScreenSwitcher extends StatelessWidget {
+  const ScreenSwitcher({super.key});
+
   static final _screens = [
     const HomeTimelinePage(),
     const NotificationsPage(),
@@ -86,18 +88,20 @@ class HomeTimelinePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Consumer<Model>(
-        builder: (context, model, _) =>
-            ListView.builder(itemBuilder: (context, index) {
-          return TimelineListItem(key: key, i: index);
-        }),
+        builder: (context, model, _) => ListView.builder(
+            itemCount: model.getTimelineItemLength(),
+            itemBuilder: (context, index) {
+              return TimelineListItem(
+                  key: key, data: model.getTimelineItem(index));
+            }),
       ),
     );
   }
 }
 
 class TimelineListItem extends StatelessWidget {
-  final int i;
-  const TimelineListItem({super.key, required this.i});
+  final TimelineListItemData data;
+  const TimelineListItem({super.key, required this.data});
 
   @override
   Widget build(BuildContext context) {
@@ -111,36 +115,63 @@ class TimelineListItem extends StatelessWidget {
                   children: [
                     Align(
                       alignment: Alignment.topRight,
-                      child: Text("1d"),
+                      child: Text(data.date.toString()),
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(Icons.warning, size: 16),
-                            Text("補足情報"),
-                          ],
-                        ),
+                        Text(data.headDetail),
                         Row(children: [
-                          Icon(Icons.person, size: 50),
-                          Column(
+                          data.icon == ""
+                              ? Icon(Icons.person, size: 50)
+                              : Image.network(
+                                  data.icon,
+                                  width: 50,
+                                  height: 50,
+                                  filterQuality: FilterQuality.medium,
+                                ),
+                          Container(
+                              padding: const EdgeInsets.fromLTRB(10, 0, 0, 0)),
+                          Expanded(
+                              child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
-                                  Text("ユーザー名"),
-                                  Text("@user1"),
+                                  Container(
+                                      child: Text(
+                                    data.userName,
+                                  )),
+                                  Container(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          10, 0, 0, 0)),
+                                  Expanded(
+                                    child: Text(data.handle,
+                                        overflow: TextOverflow.ellipsis),
+                                  ),
                                 ],
                               ),
-                              Text("補足情報"),
+                              Text(data.detail),
                             ],
-                          )
+                          ))
                         ]),
                         Container(
                             padding: const EdgeInsets.all(10),
-                            child: Text(
-                                "Twitterの動乱に巻き込まれ、移住先に選ばれつつある Threads が5日で1億人を突破した今日このごろ、皆様いかがお過ごしでしょうか。\n\nAlt Twitterとしての各種サービスに注目が集まりつつありますが、それらに関しての解説記事も乱立しており、一方で、その正確性や内容には必ずしも正確ではないものもあります。\n\nプロトコルとアプリとサービスの区別がついていなかったり、相互接続できないものが接続できると宣伝されていたり、その逆もあります。\n\n本記事では、特にネットワークに基づいて、各種SNSを分類して説明します。\nこれは、ユーザーが一番重視するであろう 「どこに参加すると誰とつながるのか」 を決めるのは、「あなたはどのネットワークに参加するか」 で決まるためです。")),
+                            child: Text(data.body)),
+                        data.ogpImageUrl != null
+                            ? Container(
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey)),
+                                padding: const EdgeInsets.all(10),
+                                child: Column(
+                                  children: [
+                                    Image.network(data.ogpImageUrl!),
+                                    SizedBox(height: 5),
+                                    Text(data.ogpText!)
+                                  ],
+                                ))
+                            : Container(),
                         Container(
                             padding: const EdgeInsets.fromLTRB(5, 0, 5, 0),
                             child: Row(
