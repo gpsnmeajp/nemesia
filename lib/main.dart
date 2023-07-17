@@ -1,115 +1,210 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'model.dart';
+import 'common_design.dart';
 
+const title = 'Nemesia for nostr';
+
+// エントリーポイント
 void main() {
-  runApp(const MyApp());
+  runApp(ChangeNotifierProvider(create: (_) => Model(), child: const MyApp()));
 }
 
+// トップレベル
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Nemesia',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
+        primarySwatch: Colors.deepPurple,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: ScreenSwitcher(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+class ScreenSwitcher extends StatelessWidget {
+  static final _screens = [
+    const HomeTimelinePage(),
+    const NotificationsPage(),
+    const MyProfilePage(),
+    const ToolsPage(),
+    const SettingsPage(),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+    return Consumer<Model>(
+        builder: (context, model, _) => Scaffold(
+              appBar: AppBarWithBackground(
+                  appBar: AppBar(
+                title: const Text(title),
+                backgroundColor: Colors.transparent,
+              )),
+              body: _screens[model.tabIndex],
+              bottomNavigationBar: BottomNavigationBar(
+                  currentIndex: model.tabIndex,
+                  onTap: (int index) {
+                    model.setTabPage(index);
+                  },
+                  type: BottomNavigationBarType.fixed,
+                  items: const <BottomNavigationBarItem>[
+                    BottomNavigationBarItem(
+                        icon: Icon(Icons.home), label: "Home"),
+                    BottomNavigationBarItem(
+                        icon: Icon(Icons.notifications), label: "Notification"),
+                    BottomNavigationBarItem(
+                        icon: Icon(Icons.person), label: "Me"),
+                    BottomNavigationBarItem(
+                        icon: Icon(Icons.build), label: "Tools"),
+                    BottomNavigationBarItem(
+                        icon: Icon(Icons.settings), label: "Settings"),
+                  ]),
+              floatingActionButton: FloatingActionButton(
+                onPressed: () {
+                  model.setTabPage(0);
+                },
+                tooltip: 'Increment',
+                child: const Icon(Icons.add),
+              ), // This trailing comma makes auto-formatting nicer for build methods.
+            ));
+  }
+}
+
+class HomeTimelinePage extends StatelessWidget {
+  const HomeTimelinePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Consumer<Model>(
+        builder: (context, model, _) =>
+            ListView.builder(itemBuilder: (context, index) {
+          return TimelineListItem(key: key, i: index);
+        }),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
+  }
+}
+
+class TimelineListItem extends StatelessWidget {
+  final int i;
+  const TimelineListItem({super.key, required this.i});
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 100),
+        child: Card(
+            margin: EdgeInsets.all(10),
+            child: Container(
+                padding: const EdgeInsets.all(10),
+                child: Stack(
+                  children: [
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: Text("1d"),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.warning, size: 16),
+                            Text("補足情報"),
+                          ],
+                        ),
+                        Row(children: [
+                          Icon(Icons.person, size: 50),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text("ユーザー名"),
+                                  Text("@user1"),
+                                ],
+                              ),
+                              Text("補足情報"),
+                            ],
+                          )
+                        ]),
+                        Container(
+                            padding: const EdgeInsets.all(10),
+                            child: Text(
+                                "Twitterの動乱に巻き込まれ、移住先に選ばれつつある Threads が5日で1億人を突破した今日このごろ、皆様いかがお過ごしでしょうか。\n\nAlt Twitterとしての各種サービスに注目が集まりつつありますが、それらに関しての解説記事も乱立しており、一方で、その正確性や内容には必ずしも正確ではないものもあります。\n\nプロトコルとアプリとサービスの区別がついていなかったり、相互接続できないものが接続できると宣伝されていたり、その逆もあります。\n\n本記事では、特にネットワークに基づいて、各種SNSを分類して説明します。\nこれは、ユーザーが一番重視するであろう 「どこに参加すると誰とつながるのか」 を決めるのは、「あなたはどのネットワークに参加するか」 で決まるためです。")),
+                        Container(
+                            padding: const EdgeInsets.fromLTRB(5, 0, 5, 0),
+                            child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  IconButton(
+                                      onPressed: () {},
+                                      icon: Icon(Icons.reply_rounded)),
+                                  IconButton(
+                                      onPressed: () {},
+                                      icon: Icon(Icons.repeat)),
+                                  IconButton(
+                                      onPressed: () {},
+                                      icon: Icon(Icons.thumb_up)),
+                                  IconButton(
+                                      onPressed: () {}, icon: Icon(Icons.menu)),
+                                ])),
+                      ],
+                    )
+                  ],
+                ))));
+  }
+}
+
+class NotificationsPage extends StatelessWidget {
+  const NotificationsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+        child: Text(
+      'Notifications',
+    ));
+  }
+}
+
+class MyProfilePage extends StatelessWidget {
+  const MyProfilePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+        child: Text(
+      'MyProfile',
+    ));
+  }
+}
+
+class ToolsPage extends StatelessWidget {
+  const ToolsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+        child: Text(
+      'Tools',
+    ));
+  }
+}
+
+class SettingsPage extends StatelessWidget {
+  const SettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+        child: Text(
+      'Settings',
+    ));
   }
 }
