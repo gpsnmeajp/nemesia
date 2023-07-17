@@ -18,10 +18,15 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Nemesia',
-      theme: ThemeData(
-        primarySwatch: Colors.deepPurple,
-      ),
-      home: ScreenSwitcher(),
+      scrollBehavior: CustomScrollBehavior(),
+      themeMode: ThemeMode.dark,
+      theme: ThemeData.light(useMaterial3: true),
+      darkTheme: ThemeData.dark(useMaterial3: true),
+      home: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: ScreenSwitcher())),
     );
   }
 }
@@ -143,16 +148,29 @@ class TimelineListItem extends StatelessWidget {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   IconButton(
+                                      hoverColor: Colors.transparent,
+                                      splashColor: Colors.transparent,
+                                      highlightColor: Colors.transparent,
                                       onPressed: () {},
                                       icon: Icon(Icons.reply_rounded)),
                                   IconButton(
+                                      hoverColor: Colors.transparent,
+                                      splashColor: Colors.transparent,
+                                      highlightColor: Colors.transparent,
                                       onPressed: () {},
                                       icon: Icon(Icons.repeat)),
                                   IconButton(
+                                      hoverColor: Colors.transparent,
+                                      splashColor: Colors.transparent,
+                                      highlightColor: Colors.transparent,
                                       onPressed: () {},
                                       icon: Icon(Icons.thumb_up)),
                                   IconButton(
-                                      onPressed: () {}, icon: Icon(Icons.menu)),
+                                      hoverColor: Colors.transparent,
+                                      splashColor: Colors.transparent,
+                                      highlightColor: Colors.transparent,
+                                      onPressed: () {},
+                                      icon: Icon(Icons.menu)),
                                 ])),
                       ],
                     )

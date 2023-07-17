@@ -1,4 +1,13 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+
+// スクロール設定
+class CustomScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices =>
+      {PointerDeviceKind.touch, PointerDeviceKind.mouse};
+}
 
 // グラデーション背景
 class AppBarWithBackground extends StatelessWidget
