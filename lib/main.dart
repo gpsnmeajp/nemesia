@@ -1,13 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'model.dart';
-import 'common_design.dart';
+import 'model/GlobalModel.dart';
+import 'common/common_design.dart';
+import 'page/HomeTimelinePage.dart';
+import 'page/MyProfilePage.dart';
+import 'page/NotificationsPage.dart';
+import 'page/SettingsPage.dart';
+import 'page/ToolsPage.dart';
+import 'common/class.dart';
+import 'repository/RelayRepository.dart';
+
+// flutter build web --release --base-href /nemesia/
 
 const title = 'Nemesia for nostr';
 
 // エントリーポイント
 void main() {
-  runApp(ChangeNotifierProvider(create: (_) => Model(), child: const MyApp()));
+  RelayRepository();
+  runApp(ChangeNotifierProvider(
+      create: (_) => GlobalModel(), child: const MyApp()));
 }
 
 // トップレベル
@@ -44,12 +55,19 @@ class ScreenSwitcher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<Model>(
+    return Consumer<GlobalModel>(
         builder: (context, model, _) => Scaffold(
               appBar: AppBarWithBackground(
                   appBar: AppBar(
                 title: const Text(title),
                 backgroundColor: Colors.transparent,
+                flexibleSpace: InkWell(
+                  onTap: () {
+                    model.homeTimelineScrollController.animateTo(0,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut);
+                  },
+                ),
               )),
               body: _screens[model.tabIndex],
               bottomNavigationBar: BottomNavigationBar(
@@ -76,184 +94,7 @@ class ScreenSwitcher extends StatelessWidget {
                 },
                 tooltip: 'Increment',
                 child: const Icon(Icons.add),
-              ), // This trailing comma makes auto-formatting nicer for build methods.
+              ),
             ));
-  }
-}
-
-class HomeTimelinePage extends StatelessWidget {
-  const HomeTimelinePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Consumer<Model>(
-        builder: (context, model, _) => ListView.builder(
-            itemCount: model.getTimelineItemLength(),
-            itemBuilder: (context, index) {
-              return TimelineListItem(
-                  key: key, data: model.getTimelineItem(index));
-            }),
-      ),
-    );
-  }
-}
-
-class TimelineListItem extends StatelessWidget {
-  final TimelineListItemData data;
-  const TimelineListItem({super.key, required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    return ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 100),
-        child: Card(
-            margin: EdgeInsets.all(10),
-            child: Container(
-                padding: const EdgeInsets.all(10),
-                child: Stack(
-                  children: [
-                    Align(
-                      alignment: Alignment.topRight,
-                      child: Text(data.date.toString()),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(data.headDetail),
-                        Row(children: [
-                          data.icon == ""
-                              ? Icon(Icons.person, size: 50)
-                              : Image.network(
-                                  data.icon,
-                                  width: 50,
-                                  height: 50,
-                                  filterQuality: FilterQuality.medium,
-                                ),
-                          Container(
-                              padding: const EdgeInsets.fromLTRB(10, 0, 0, 0)),
-                          Expanded(
-                              child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                      child: Text(
-                                    data.userName,
-                                  )),
-                                  Container(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          10, 0, 0, 0)),
-                                  Expanded(
-                                    child: Text(data.handle,
-                                        overflow: TextOverflow.ellipsis),
-                                  ),
-                                ],
-                              ),
-                              Text(data.detail),
-                            ],
-                          ))
-                        ]),
-                        Container(
-                            padding: const EdgeInsets.all(10),
-                            child: Text(data.body)),
-                        data.ogpImageUrl != null
-                            ? Container(
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                    border: Border.all(color: Colors.grey)),
-                                padding: const EdgeInsets.all(10),
-                                child: Column(
-                                  children: [
-                                    Image.network(data.ogpImageUrl!),
-                                    SizedBox(height: 5),
-                                    Text(data.ogpText!)
-                                  ],
-                                ))
-                            : Container(),
-                        Container(
-                            padding: const EdgeInsets.fromLTRB(5, 0, 5, 0),
-                            child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  IconButton(
-                                      hoverColor: Colors.transparent,
-                                      splashColor: Colors.transparent,
-                                      highlightColor: Colors.transparent,
-                                      onPressed: () {},
-                                      icon: Icon(Icons.reply_rounded)),
-                                  IconButton(
-                                      hoverColor: Colors.transparent,
-                                      splashColor: Colors.transparent,
-                                      highlightColor: Colors.transparent,
-                                      onPressed: () {},
-                                      icon: Icon(Icons.repeat)),
-                                  IconButton(
-                                      hoverColor: Colors.transparent,
-                                      splashColor: Colors.transparent,
-                                      highlightColor: Colors.transparent,
-                                      onPressed: () {},
-                                      icon: Icon(Icons.thumb_up)),
-                                  IconButton(
-                                      hoverColor: Colors.transparent,
-                                      splashColor: Colors.transparent,
-                                      highlightColor: Colors.transparent,
-                                      onPressed: () {},
-                                      icon: Icon(Icons.menu)),
-                                ])),
-                      ],
-                    )
-                  ],
-                ))));
-  }
-}
-
-class NotificationsPage extends StatelessWidget {
-  const NotificationsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-        child: Text(
-      'Notifications',
-    ));
-  }
-}
-
-class MyProfilePage extends StatelessWidget {
-  const MyProfilePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-        child: Text(
-      'MyProfile',
-    ));
-  }
-}
-
-class ToolsPage extends StatelessWidget {
-  const ToolsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-        child: Text(
-      'Tools',
-    ));
-  }
-}
-
-class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-        child: Text(
-      'Settings',
-    ));
   }
 }
