@@ -20,16 +20,41 @@ class RelayRepository {
   RelayRepository._() {
     // 100ms周期タイマー
     Future.delayed(const Duration(milliseconds: 100), onPeriodicTimer);
+    Timer.periodic(const Duration(seconds: 15), (timer) async {
+      // 15秒に1回、プロフィールを取得することでpingの代用とする
+      try {
+        await oneshotRequest([
+          Filter(
+              kinds: [0],
+              limit: 1,
+              authors: [
+                "2235b39641a2e2ed57279aa6469d9912e28c1f0fa489ffe6eb2b1e68bc5f31d2"
+              ])
+        ]);
+      } catch (e) {
+        // ここに来るということは誰も応答しなかった
+        // 再接続
+        await connect();
+
+        // サブスクリプションを再開
+        _subscriptionRequest.forEach((key, request) {
+          sendAllRelay(request.serialize());
+        });
+      }
+    });
   }
 
   // 接続リレープール
-  List<WebSocket> _webSocketList = [];
+  Map<String, WebSocket> _webSocketList = Map();
 
   // 接続したいリレーリスト
   List<String> _relays = ["wss://relay-jp.nostr.wirednet.jp", "wss://yabu.me"];
 
   // イベントキュー
   Queue<Event> _eventBuffer = Queue();
+
+  // サブスクリプションID - Request (再接続時の再購読用)
+  Map<String, Request> _subscriptionRequest = Map();
 
   // サブスクリプションID - Event callback
   Map<String, Function(Event)> _subscriptionEventCallback = Map();
@@ -56,9 +81,9 @@ class RelayRepository {
   // 接続
   Future<void> connect() async {
     // すでに接続済みなら全部切断する
-    for (var w in _webSocketList) {
+    _webSocketList.forEach((r, w) {
       w.close();
-    }
+    });
     _webSocketList.clear();
 
     // 接続を開始する
@@ -67,27 +92,45 @@ class RelayRepository {
         // なにか受信した: 受信物はすべて同じところに流し込む
         onWebsocketReceived(r, event);
       }, onDone: () {
-        // 通信が終了した
-        // TODO: 再接続する
-        print("onDone: [$r]");
+        reconnect(r);
       }, onError: (e) {
-        // 異常が発生した
-        // TODO: 再接続する
-        print("onError: [$r]${e.toString()}");
+        reconnect(r);
       });
 
       // 接続管理する
-      _webSocketList.add(w);
+      _webSocketList[r] = w;
       print("Connect");
     }
+  }
+
+  void reconnect(String relayUrl) {
+    print("reconnect");
+    try {
+      _webSocketList[relayUrl]?.close();
+    } catch (e) {
+      // Do noting
+    }
+    var r = relayUrl;
+    // 5秒後に再接続
+    Future.delayed(const Duration(milliseconds: 5000), () async {
+      var w = await connectWebSocket(r, (event) {
+        // なにか受信した: 受信物はすべて同じところに流し込む
+        onWebsocketReceived(r, event);
+      }, onDone: () {
+        reconnect(r);
+      }, onError: (e) {
+        reconnect(r);
+      });
+      _webSocketList[r] = w;
+    });
   }
 
   // すべてのリレーに送信する
   void sendAllRelay(dynamic data) {
     print("Send");
-    for (var w in _webSocketList) {
+    _webSocketList.forEach((r, w) {
       sendWebSocket(w, data);
-    }
+    });
   }
 
   // 接続済みWebsocketから何かを受け取った
@@ -100,25 +143,25 @@ class RelayRepository {
       var data = jsonDecode(payload);
       if (data[0] == "EVENT") {
         Event e = Event.deserialize(data, verify: !kIsWeb);
-        if (_receivedEventId.containsKey(e.id)) {
-          // このイベントIDはすでに受信済みなので、Relayの記録だけして処理しない
-          _receivedEventId[e.id]?.add(relayUrl);
-          return;
-        } else {
-          // 初回受信
-          _receivedEventId[e.id] = [];
-          _receivedEventId[e.id]?.add(relayUrl);
-        }
-
         if (e.kind == 4) {
           // ignore: deprecated_member_use
           e = EncryptedDirectMessage(data);
         }
+
         if (_subscriptionOneshotEventCallback.containsKey(e.subscriptionId)) {
           // 単発はキューに入れず即時Callback
           _subscriptionOneshotEventCallback[e.subscriptionId]?.call(e);
         } else {
-          _eventBuffer.add(e);
+          if (_receivedEventId.containsKey(e.id)) {
+            // このイベントIDはすでに受信済みなので、Relayの記録だけして処理しない (この扱いが常に良い訳では無い。用途別で考える必要がある)
+            _receivedEventId[e.id]?.add(relayUrl);
+            return;
+          } else {
+            // 初回受信
+            _receivedEventId[e.id] = [];
+            _receivedEventId[e.id]?.add(relayUrl);
+            _eventBuffer.add(e);
+          }
         }
         return;
       }
@@ -165,6 +208,9 @@ class RelayRepository {
 
     Request request = Request(subscriptionId, filters);
 
+    // フィルタを記憶
+    _subscriptionRequest[subscriptionId] = request;
+
     // callbackを登録
     _subscriptionEventCallback[subscriptionId] = eventCallback;
     _subscriptionEoseCallback[subscriptionId] = eoseCallback;
@@ -200,6 +246,9 @@ class RelayRepository {
   void closeSubscribeRequest(String subscriptionId) {
     print("[closeSubscribeRequest]$subscriptionId");
 
+    // リクエストを削除
+    _subscriptionRequest.remove(subscriptionId);
+
     // callbackを削除
     _subscriptionEventCallback.remove(subscriptionId);
     _subscriptionEoseCallback.remove(subscriptionId);
@@ -212,7 +261,7 @@ class RelayRepository {
   void closeOneshotSubscribeRequest(String subscriptionId) {
     print("[closeOneshotSubscribeRequest]$subscriptionId");
 
-    // callbackを咲くじぃ
+    // callbackを削除
     _subscriptionOneshotEventCallback.remove(subscriptionId);
     _subscriptionOneshotEoseCallback.remove(subscriptionId);
 
@@ -220,20 +269,22 @@ class RelayRepository {
     sendAllRelay(Close(subscriptionId).serialize());
   }
 
-  Future<Event> oneshotRequest(List<Filter> filters) async {
+  Future<Event?> oneshotRequest(List<Filter> filters) async {
     print("[oneshotRequest] Start");
     var completer = Completer<Event>();
+    var isEOSE = false;
 
     String subscriptionId =
         addSubscribeRequestFromFilterOneshot(filters, (Event event) {
       // EVENT
       // サブスク解除
+      print("[oneshotRequest] OK: ${event.subscriptionId!}");
       closeOneshotSubscribeRequest(event.subscriptionId!);
       completer.complete(event);
-      print("[oneshotRequest] OK: ${event.subscriptionId!}");
     }, (String subscriptionId) {
       // EOSE
       print("[oneshotRequest] EOSE: $subscriptionId");
+      isEOSE = true;
     });
 
     // タイムアウト
@@ -242,8 +293,14 @@ class RelayRepository {
       if (!completer.isCompleted) {
         // サブスク解除
         closeOneshotSubscribeRequest(subscriptionId);
-        completer.completeError("Timeout");
-        print("[oneshotRequest] Timeout");
+        if (isEOSE) {
+          // 応答はあったが見つからなかった
+          completer.complete(null);
+        } else {
+          // 応答がなかった
+          completer.completeError("Timeout");
+          print("[oneshotRequest] Timeout");
+        }
       }
     });
 
@@ -261,7 +318,9 @@ class RelayRepository {
           final p = await oneshotRequest([
             Filter(kinds: [0], limit: 1, authors: [event.pubkey])
           ]);
-          profiles[p.pubkey] = p;
+          if (p != null) {
+            profiles[p.pubkey] = p;
+          }
         } catch (e) {
           print("timeout");
           //Do noting (timeout error)

@@ -82,31 +82,34 @@ class GlobalModel extends ChangeNotifier {
             ];
             try {
               final m = await relayRepository.oneshotRequest(request);
-              v.nextMemoData = TimelineListItemData();
-              v.nextMemoData!.date =
-                  DateTime.fromMillisecondsSinceEpoch(m.createdAt * 1000);
-              v.nextMemoData!.body = m.content;
-              v.nextMemoData!.handle = m.pubkey;
+              if (m != null) {
+                v.nextMemoData = TimelineListItemData();
+                v.nextMemoData!.date =
+                    DateTime.fromMillisecondsSinceEpoch(m.createdAt * 1000);
+                v.nextMemoData!.body = m.content;
+                v.nextMemoData!.handle = m.pubkey;
 
-              // NIP-36 Check
-              try {
-                v.nextMemoData!.cw = m.tags.firstWhere(
-                    (element) => element[0] == "content-warning")[1];
-              } catch (e) {
-                // Do noting
-              }
-
-              if (relayRepository.profiles.containsKey(m.pubkey)) {
-                var p = jsonDecode(relayRepository.profiles[m.pubkey]!.content);
-                if (p.containsKey("name")) {
-                  v.nextMemoData!.userName =
-                      p["displayName"] ?? p["display_name"] ?? "";
-                  v.nextMemoData!.handle = "@" + (p["name"] ?? "");
+                // NIP-36 Check
+                try {
+                  v.nextMemoData!.cw = m.tags.firstWhere(
+                      (element) => element[0] == "content-warning")[1];
+                } catch (e) {
+                  // Do noting
                 }
-                if (p.containsKey("picture")) {
-                  if (p["picture"].startsWith("https://") ||
-                      p["picture"].startsWith("http://")) {
-                    v.nextMemoData!.icon = p["picture"];
+
+                if (relayRepository.profiles.containsKey(m.pubkey)) {
+                  var p =
+                      jsonDecode(relayRepository.profiles[m.pubkey]!.content);
+                  if (p.containsKey("name")) {
+                    v.nextMemoData!.userName =
+                        p["displayName"] ?? p["display_name"] ?? "";
+                    v.nextMemoData!.handle = "@" + (p["name"] ?? "");
+                  }
+                  if (p.containsKey("picture")) {
+                    if (p["picture"].startsWith("https://") ||
+                        p["picture"].startsWith("http://")) {
+                      v.nextMemoData!.icon = p["picture"];
+                    }
                   }
                 }
               }
