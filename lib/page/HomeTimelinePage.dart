@@ -18,8 +18,9 @@ class HomeTimelinePage extends StatelessWidget {
               itemBuilder: (context, index) {
                 return TimelineListItem(
                   model.getTimelineItem(index),
+                  dataIndex: index,
                   key: key,
-                  isShowBar: true,
+                  isChild: false,
                 );
               })),
     );

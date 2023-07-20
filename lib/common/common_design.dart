@@ -43,10 +43,11 @@ class AppBarWithBackground extends StatelessWidget
 // タイムラインのカード1枚
 class TimelineListItem extends StatelessWidget {
   final TimelineListItemData data;
-  final bool isShowBar;
+  final bool isChild;
   final Color? color;
+  final dynamic dataIndex;
   const TimelineListItem(this.data,
-      {super.key, required, required this.isShowBar, this.color});
+      {super.key, required this.dataIndex, required this.isChild, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -68,30 +69,53 @@ class TimelineListItem extends StatelessWidget {
                       children: [
                         Text(data.headDetail),
                         TimelineListItemNameplate(data),
-                        Container(
-                            padding: const EdgeInsets.all(10),
-                            child: Linkify(
-                                text: data.body,
-                                linkStyle: const TextStyle(
-                                    color: Colors.blue,
-                                    decoration: TextDecoration.none),
-                                onOpen: (url) =>
-                                    launchUrl(Uri.parse(url.url)))),
-                        data.nextMemoData != null
+                        !data.cwOpen && data.cw != null
                             ? Container(
-                                alignment: Alignment.center,
-                                padding: const EdgeInsets.all(10),
-                                child: TimelineListItem(
-                                  data.nextMemoData!,
-                                  isShowBar: false,
-                                  color: const Color.fromARGB(255, 64, 64, 64),
+                                margin: EdgeInsets.all(10),
+                                child: ElevatedButton.icon(
+                                  icon: Icon(Icons.warning),
+                                  style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.deepPurple),
+                                  onPressed: () {
+                                    Provider.of<GlobalModel>(context,
+                                            listen: false)
+                                        .cwOpen(dataIndex, isChild);
+                                  },
+                                  label: Text(
+                                      "NIP-36 Content Warning.\nreason: ${data.cw!}"),
                                 ),
                               )
-                            : Container(),
-                        data.ogpImageUrl != null
-                            ? TimelineListItemOGP(data)
-                            : Container(),
-                        isShowBar ? TimelineListItemBar(data) : Container(),
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                    Container(
+                                        padding: const EdgeInsets.all(10),
+                                        child: Linkify(
+                                            text: data.body,
+                                            linkStyle: const TextStyle(
+                                                color: Colors.blue,
+                                                decoration:
+                                                    TextDecoration.none),
+                                            onOpen: (url) =>
+                                                launchUrl(Uri.parse(url.url)))),
+                                    data.nextMemoData != null
+                                        ? Container(
+                                            alignment: Alignment.center,
+                                            padding: const EdgeInsets.all(10),
+                                            child: TimelineListItem(
+                                              data.nextMemoData!,
+                                              dataIndex: dataIndex,
+                                              isChild: true,
+                                              color: const Color.fromARGB(
+                                                  255, 64, 64, 64),
+                                            ),
+                                          )
+                                        : Container(),
+                                    data.ogpImageUrl != null
+                                        ? TimelineListItemOGP(data)
+                                        : Container(),
+                                  ]),
+                        !isChild ? TimelineListItemBar(data) : Container(),
                       ],
                     )
                   ],

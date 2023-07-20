@@ -42,8 +42,15 @@ class GlobalModel extends ChangeNotifier {
           TimelineListItemData v = TimelineListItemData();
           v.date = DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000);
           v.body = event.content;
-
           v.handle = event.pubkey;
+
+          // NIP-36 Check
+          try {
+            v.cw = event.tags
+                .firstWhere((element) => element[0] == "content-warning")[1];
+          } catch (e) {
+            // Do noting
+          }
 
           if (relayRepository.profiles.containsKey(event.pubkey)) {
             var p = jsonDecode(relayRepository.profiles[event.pubkey]!.content);
@@ -60,10 +67,10 @@ class GlobalModel extends ChangeNotifier {
           }
 
           String? note;
-          for (var tag in event.tags) {
-            if (tag[0] == "e") {
-              note = tag[1];
-            }
+          try {
+            note = event.tags.firstWhere((element) => element[0] == "e")[1];
+          } catch (e) {
+            // Do noting
           }
           if (note != null) {
             final request = [
@@ -80,6 +87,14 @@ class GlobalModel extends ChangeNotifier {
                   DateTime.fromMillisecondsSinceEpoch(m.createdAt * 1000);
               v.nextMemoData!.body = m.content;
               v.nextMemoData!.handle = m.pubkey;
+
+              // NIP-36 Check
+              try {
+                v.nextMemoData!.cw = m.tags.firstWhere(
+                    (element) => element[0] == "content-warning")[1];
+              } catch (e) {
+                // Do noting
+              }
 
               if (relayRepository.profiles.containsKey(m.pubkey)) {
                 var p = jsonDecode(relayRepository.profiles[m.pubkey]!.content);
@@ -147,6 +162,15 @@ class GlobalModel extends ChangeNotifier {
 
   int getTimelineItemLength() {
     return timelineListItems.length;
+  }
+
+  void cwOpen(int index, bool isChild) {
+    if (isChild) {
+      timelineListItems[index].nextMemoData?.cwOpen = true;
+    } else {
+      timelineListItems[index].cwOpen = true;
+    }
+    notifyListeners();
   }
 
   void setTabPage(int index) {
