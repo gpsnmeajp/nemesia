@@ -214,7 +214,7 @@ class TimelineListItemBar extends StatelessWidget {
               splashColor: Colors.transparent,
               highlightColor: Colors.transparent,
               onPressed: () {},
-              icon: Icon(Icons.thumb_up)),
+              icon: Icon(Icons.thumb_up_outlined)),
           IconButton(
               hoverColor: Colors.transparent,
               splashColor: Colors.transparent,

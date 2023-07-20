@@ -26,7 +26,7 @@ class RelayRepository {
   List<WebSocket> _webSocketList = [];
 
   // 接続したいリレーリスト
-  List<String> _relays = ["wss://relay-jp.nostr.wirednet.jp"];
+  List<String> _relays = ["wss://relay-jp.nostr.wirednet.jp", "wss://yabu.me"];
 
   // イベントキュー
   Queue<Event> _eventBuffer = Queue();
@@ -39,8 +39,11 @@ class RelayRepository {
   Map<String, Function(String)> _subscriptionEoseCallback = Map();
   Map<String, Function(String)> _subscriptionOneshotEoseCallback = Map();
 
+  // 受信済みイベント情報
+  Map<String, List<String>> _receivedEventId = Map(); // ID, Relays
+
   // プロフィール情報
-  Map<String, Event> profiles = {};
+  Map<String, Event> profiles = {}; // npub, Event
 
   List<String> getRelays() {
     return _relays;
@@ -63,18 +66,15 @@ class RelayRepository {
       var w = await connectWebSocket(r, (event) {
         // なにか受信した: 受信物はすべて同じところに流し込む
         onWebsocketReceived(r, event);
-      });
-      /*
-      , onDone: () {
+      }, onDone: () {
         // 通信が終了した
         // TODO: 再接続する
-        print("onDone: [$r]${w.closeReason!}");
+        print("onDone: [$r]");
       }, onError: (e) {
         // 異常が発生した
         // TODO: 再接続する
         print("onError: [$r]${e.toString()}");
       });
-      */
 
       // 接続管理する
       _webSocketList.add(w);
@@ -94,12 +94,22 @@ class RelayRepository {
   void onWebsocketReceived(relayUrl, payload) async {
     // 文字列を受信した時
     if (payload is String) {
-      print('Received event($relayUrl): $payload');
+      print('[onWebsocketReceived] Received event($relayUrl): $payload');
 
       // Web版ではEVENTは署名検証スキップする(負荷が非常に高いため)
       var data = jsonDecode(payload);
       if (data[0] == "EVENT") {
         Event e = Event.deserialize(data, verify: !kIsWeb);
+        if (_receivedEventId.containsKey(e.id)) {
+          // このイベントIDはすでに受信済みなので、Relayの記録だけして処理しない
+          _receivedEventId[e.id]?.add(relayUrl);
+          return;
+        } else {
+          // 初回受信
+          _receivedEventId[e.id] = [];
+          _receivedEventId[e.id]?.add(relayUrl);
+        }
+
         if (e.kind == 4) {
           // ignore: deprecated_member_use
           e = EncryptedDirectMessage(data);
@@ -151,6 +161,8 @@ class RelayRepository {
       Function(Event event) eventCallback, Function(String) eoseCallback) {
     // リクエストを生成
     String subscriptionId = generate64RandomHexChars().substring(0, 32);
+    print("[addSubscribeRequestFromFilter]$subscriptionId");
+
     Request request = Request(subscriptionId, filters);
 
     // callbackを登録
@@ -169,6 +181,8 @@ class RelayRepository {
       Function(Event event) eventCallback, Function(String) eoseCallback) {
     // リクエストを生成
     String subscriptionId = generate64RandomHexChars().substring(0, 32);
+    print("[addSubscribeRequestFromFilterOneshot]$subscriptionId");
+
     Request request = Request(subscriptionId, filters);
 
     // callbackを登録
@@ -184,7 +198,9 @@ class RelayRepository {
 
   // 継続的サブスクリプションを終了
   void closeSubscribeRequest(String subscriptionId) {
-    // callbackを咲くじぃ
+    print("[closeSubscribeRequest]$subscriptionId");
+
+    // callbackを削除
     _subscriptionEventCallback.remove(subscriptionId);
     _subscriptionEoseCallback.remove(subscriptionId);
 
@@ -194,6 +210,8 @@ class RelayRepository {
 
   // 単発サブスクリプションを終了
   void closeOneshotSubscribeRequest(String subscriptionId) {
+    print("[closeOneshotSubscribeRequest]$subscriptionId");
+
     // callbackを咲くじぃ
     _subscriptionOneshotEventCallback.remove(subscriptionId);
     _subscriptionOneshotEoseCallback.remove(subscriptionId);
@@ -203,6 +221,7 @@ class RelayRepository {
   }
 
   Future<Event> oneshotRequest(List<Filter> filters) async {
+    print("[oneshotRequest] Start");
     var completer = Completer<Event>();
 
     String subscriptionId =
@@ -211,8 +230,10 @@ class RelayRepository {
       // サブスク解除
       closeOneshotSubscribeRequest(event.subscriptionId!);
       completer.complete(event);
+      print("[oneshotRequest] OK: ${event.subscriptionId!}");
     }, (String subscriptionId) {
       // EOSE
+      print("[oneshotRequest] EOSE: $subscriptionId");
     });
 
     // タイムアウト
@@ -220,8 +241,9 @@ class RelayRepository {
       // 3秒後までに完了していなかったら
       if (!completer.isCompleted) {
         // サブスク解除
-        closeSubscribeRequest(subscriptionId);
+        closeOneshotSubscribeRequest(subscriptionId);
         completer.completeError("Timeout");
+        print("[oneshotRequest] Timeout");
       }
     });
 
