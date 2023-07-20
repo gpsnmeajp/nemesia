@@ -35,7 +35,7 @@ class GlobalModel extends ChangeNotifier {
           //受信する最低時刻
           since: epochTimeSec_before30min,
           //最初に受信するイベント数の上限
-          limit: 450,
+          limit: 10,
         )
       ], (event) async {
         if (event.kind == 1) {

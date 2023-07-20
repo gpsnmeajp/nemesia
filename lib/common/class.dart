@@ -8,5 +8,7 @@ class TimelineListItemData {
   String body = "";
   String? ogpImageUrl;
   String ogpText = "";
+  String? cw;
+  bool cwOpen = false;
   TimelineListItemData? nextMemoData;
 }

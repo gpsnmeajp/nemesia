@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:nostr/nostr.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -5,6 +8,7 @@ import 'package:metadata_fetch/metadata_fetch.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io' if (dart.library.html) 'dart:html';
+import 'websocket_io.dart' if (dart.library.html) 'websocket_html.dart';
 import 'package:async/async.dart';
 
 class RelayRepository {
@@ -56,12 +60,12 @@ class RelayRepository {
 
     // 接続を開始する
     for (var r in _relays) {
-      var w = await WebSocket.connect(r);
-      w.pingInterval = const Duration(seconds: 3); //Ping
-      w.listen((event) {
+      var w = await connectWebSocket(r, (event) {
         // なにか受信した: 受信物はすべて同じところに流し込む
         onWebsocketReceived(r, event);
-      }, onDone: () {
+      });
+      /*
+      , onDone: () {
         // 通信が終了した
         // TODO: 再接続する
         print("onDone: [$r]${w.closeReason!}");
@@ -70,6 +74,7 @@ class RelayRepository {
         // TODO: 再接続する
         print("onError: [$r]${e.toString()}");
       });
+      */
 
       // 接続管理する
       _webSocketList.add(w);
@@ -81,27 +86,38 @@ class RelayRepository {
   void sendAllRelay(dynamic data) {
     print("Send");
     for (var w in _webSocketList) {
-      w.add(data);
+      sendWebSocket(w, data);
     }
   }
 
   // 接続済みWebsocketから何かを受け取った
-  void onWebsocketReceived(relayUrl, payload) {
+  void onWebsocketReceived(relayUrl, payload) async {
     // 文字列を受信した時
     if (payload is String) {
-      // print('Received event($relayUrl): $payload');
+      print('Received event($relayUrl): $payload');
 
-      //ここで種類別のデシリアライズも完了する
+      // Web版ではEVENTは署名検証スキップする(負荷が非常に高いため)
+      var data = jsonDecode(payload);
+      if (data[0] == "EVENT") {
+        Event e = Event.deserialize(data, verify: !kIsWeb);
+        if (e.kind == 4) {
+          // ignore: deprecated_member_use
+          e = EncryptedDirectMessage(data);
+        }
+        if (_subscriptionOneshotEventCallback.containsKey(e.subscriptionId)) {
+          // 単発はキューに入れず即時Callback
+          _subscriptionOneshotEventCallback[e.subscriptionId]?.call(e);
+        } else {
+          _eventBuffer.add(e);
+        }
+        return;
+      }
+
+      //デシリアライズと、署名検証
       Message m = Message.deserialize(payload);
       switch (m.type) {
         case "EVENT":
-          Event e = m.message as Event;
-          if (_subscriptionOneshotEventCallback.containsKey(e.subscriptionId)) {
-            // 単発はキューに入れず即時Callback
-            _subscriptionOneshotEventCallback[e.subscriptionId]?.call(e);
-          } else {
-            _eventBuffer.add(e);
-          }
+          // ここには来ない
           break;
         case "OK":
           Nip20 e = m.message as Nip20;
