@@ -22,6 +22,7 @@ class RelayRepository {
     Future.delayed(const Duration(milliseconds: 100), onPeriodicTimer);
     Timer.periodic(const Duration(seconds: 15), (timer) async {
       // 15秒に1回、プロフィールを取得することでpingの代用とする
+      // 本当はもっといい方法がある？
       try {
         await oneshotRequest([
           Filter(
@@ -153,7 +154,8 @@ class RelayRepository {
           _subscriptionOneshotEventCallback[e.subscriptionId]?.call(e);
         } else {
           if (_receivedEventId.containsKey(e.id)) {
-            // このイベントIDはすでに受信済みなので、Relayの記録だけして処理しない (この扱いが常に良い訳では無い。用途別で考える必要がある)
+            // このイベントIDはすでに受信済みなので、Relayの記録だけして処理しない
+            // TODO: これは本来サブスクリプションIDごとに重複受信を区別する必要がある。でないと捨てすぎて通信できない。現にOneshotを除外しているのもこれが理由。
             _receivedEventId[e.id]?.add(relayUrl);
             return;
           } else {

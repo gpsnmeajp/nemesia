@@ -66,6 +66,32 @@ class GlobalModel extends ChangeNotifier {
             }
           }
 
+          RegExp _urlReg = RegExp(
+            r'https?://([\w-]+\.)+[\w-]+(/[\w-./?%&=#]*)?',
+          );
+          String? url = _urlReg.firstMatch(event.content)?.group(0);
+          if (url != null) {
+            if (url.endsWith("png") ||
+                url.endsWith("jpg") ||
+                url.endsWith("jpeg") ||
+                url.endsWith("gif")) {
+              v.ogpImageUrl = url;
+            } else {
+              try {
+                var ogpRes = await MetadataFetch.extract(url);
+                v.ogpImageUrl = ogpRes?.image;
+                v.ogpText = ogpRes?.title ?? "";
+              } catch (e) {
+                //Do noting (Failed)
+              }
+            }
+          }
+
+          RegExp _noteReg = RegExp(
+            r'nostr:note1([\w-]+)',
+          );
+          v.body = v.body.replaceAll(_noteReg, "");
+
           String? note;
           try {
             note = event.tags.firstWhere((element) => element[0] == "e")[1];
@@ -111,6 +137,27 @@ class GlobalModel extends ChangeNotifier {
                       v.nextMemoData!.icon = p["picture"];
                     }
                   }
+
+                  RegExp _urlReg = RegExp(
+                    r'https?://([\w-]+\.)+[\w-]+(/[\w-./?%&=#]*)?',
+                  );
+                  String? url = _urlReg.firstMatch(m.content)?.group(0);
+                  if (url != null) {
+                    if (url.endsWith("png") ||
+                        url.endsWith("jpg") ||
+                        url.endsWith("jpeg") ||
+                        url.endsWith("gif")) {
+                      v.nextMemoData!.ogpImageUrl = url;
+                    } else {
+                      try {
+                        var ogpRes = await MetadataFetch.extract(url);
+                        v.nextMemoData!.ogpImageUrl = ogpRes?.image;
+                        v.nextMemoData!.ogpText = ogpRes?.title ?? "";
+                      } catch (e) {
+                        //Do noting (Failed)
+                      }
+                    }
+                  }
                 }
               }
             } catch (e) {
@@ -118,32 +165,6 @@ class GlobalModel extends ChangeNotifier {
               //Do noting (timeout error)
             }
           }
-
-          RegExp _urlReg = RegExp(
-            r'https?://([\w-]+\.)+[\w-]+(/[\w-./?%&=#]*)?',
-          );
-          String? url = _urlReg.firstMatch(event.content)?.group(0);
-          if (url != null) {
-            if (url.endsWith("png") ||
-                url.endsWith("jpg") ||
-                url.endsWith("jpeg") ||
-                url.endsWith("gif")) {
-              v.ogpImageUrl = url;
-            } else {
-              try {
-                var ogpRes = await MetadataFetch.extract(url);
-                v.ogpImageUrl = ogpRes?.image;
-                v.ogpText = ogpRes?.title ?? "";
-              } catch (e) {
-                //Do noting (Failed)
-              }
-            }
-          }
-
-          RegExp _noteReg = RegExp(
-            r'nostr:note1([\w-]+)',
-          );
-          v.body = v.body.replaceAll(_noteReg, "");
 
           timelineListItems.add(v);
           //print(event.content);
