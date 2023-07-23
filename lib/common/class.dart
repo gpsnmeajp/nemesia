@@ -1,12 +1,14 @@
+import 'package:flutter/foundation.dart';
+
 class TimelineListItemData {
   DateTime date = DateTime.now();
   String headDetail = "";
   String detail = "";
   String userName = "";
   String handle = "";
-  String icon = "";
+  Uint8List? icon;
   String body = "";
-  String? ogpImageUrl;
+  Uint8List? ogpImage;
   String ogpText = "";
   String? cw;
   bool cwOpen = false;

@@ -12,17 +12,21 @@ class HomeTimelinePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Consumer<GlobalModel>(
-          builder: (context, model, _) => ListView.builder(
-              controller: model.homeTimelineScrollController,
-              itemCount: model.getTimelineItemLength(),
-              itemBuilder: (context, index) {
-                return TimelineListItem(
-                  model.getTimelineItem(index),
-                  dataIndex: index,
-                  key: key,
-                  isChild: false,
-                );
-              })),
+          builder: (context, model, _) => RefreshIndicator(
+              onRefresh: () async {
+                await model.renewHomeTimeline();
+              },
+              child: ListView.builder(
+                  controller: model.homeTimelineScrollController,
+                  itemCount: model.getTimelineItemLength(),
+                  itemBuilder: (context, index) {
+                    return TimelineListItem(
+                      model.getTimelineItem(index),
+                      dataIndex: index,
+                      key: key,
+                      isChild: false,
+                    );
+                  }))),
     );
   }
 }

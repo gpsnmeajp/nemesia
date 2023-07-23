@@ -3,7 +3,10 @@ import 'package:nostr/nostr.dart';
 
 import 'dart:convert';
 import '../common/class.dart';
-import '../repository/RelayRepository.dart';
+import '../repository/relay_repository.dart';
+import '../repository/repository_interfaces.dart';
+import '../repository/image_repository.dart';
+import '../repository/metadata_repository.dart';
 import 'package:http/http.dart' as http;
 import 'package:metadata_fetch/metadata_fetch.dart';
 
@@ -17,170 +20,127 @@ class GlobalModel extends ChangeNotifier {
     //Repositoryを初期化
     relayRepository = RelayRepository();
 
+    TimelineListItemData v = TimelineListItemData();
+    v.userName = "Loading...";
+    timelineListItems.add(v);
+
     Future.sync(() async {
       //リレーに接続
       await relayRepository.connect();
 
-      print("Hello");
-      // お試しkind1
-      int epochTimeSec_before30min =
-          ((DateTime.now().subtract(Duration(minutes: 30)))
-                      .millisecondsSinceEpoch /
-                  1000)
-              .floor();
+      //初回取得
+      renewHomeTimeline();
+    });
+  }
 
-      relayRepository.addSubscribeRequestFromFilter([
-        Filter(
-          kinds: [1],
-          //受信する最低時刻
-          since: epochTimeSec_before30min,
-          //最初に受信するイベント数の上限
-          limit: 10,
-        )
-      ], (event) async {
-        if (event.kind == 1) {
-          TimelineListItemData v = TimelineListItemData();
-          v.date = DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000);
-          v.body = event.content;
-          v.handle = event.pubkey;
+  Future<void> renewHomeTimeline() async {
+    print("Hello");
+    var mypubkey = await relayRepository.getMyPubkey();
+    List<String>? pubkeys;
+    if (mypubkey != null) {
+      pubkeys = await relayRepository.getContactList(mypubkey);
+    }
 
-          // NIP-36 Check
+    List<TextNote> textNotes = await relayRepository.getTextNotes(
+      authers: pubkeys,
+      since: (DateTime.now().subtract(const Duration(minutes: 30))),
+      limit: 20,
+    );
+
+    timelineListItems.clear();
+    for (var n in textNotes) {
+      TimelineListItemData v = TimelineListItemData();
+      v.date = n.createdAt;
+      v.body = n.content;
+      v.cw = n.nip36;
+
+      for (var r in n.relays) {
+        v.detail += r + "\n";
+      }
+
+      v.userName = n.autherMetadata?.displayName ?? n.pubkey;
+      v.handle = "@${n.autherMetadata?.name ?? ""}";
+      v.icon = n.autherMetadata?.picture != null
+          ? await FetchImageInterface.getImageFromURL(
+              n.autherMetadata!.picture!)
+          : null;
+
+      RegExp _urlReg = RegExp(
+        r'https?://([\w-]+\.)+[\w-]+(/[\w-./?%&=#]*)?',
+      );
+      String? url = _urlReg.firstMatch(n.content)?.group(0);
+      if (url != null) {
+        if (url.endsWith("png") ||
+            url.endsWith("jpg") ||
+            url.endsWith("jpeg") ||
+            url.endsWith("gif")) {
+          v.ogpImage = await FetchImageInterface.getImageFromURL(url);
+        } else {
           try {
-            v.cw = event.tags
-                .firstWhere((element) => element[0] == "content-warning")[1];
+            var ogpRes = await OGPMetadataInterface.getMetaDataFromURL(url);
+            v.ogpImage = ogpRes?.image;
+            v.ogpText = ogpRes?.title ?? "";
           } catch (e) {
-            // Do noting
+            //Do noting (Failed)
           }
+        }
+      }
 
-          if (relayRepository.profiles.containsKey(event.pubkey)) {
-            var p = jsonDecode(relayRepository.profiles[event.pubkey]!.content);
-            if (p.containsKey("name")) {
-              v.userName = p["displayName"] ?? p["display_name"] ?? "";
-              v.handle = "@" + (p["name"] ?? "");
-            }
-            if (p.containsKey("picture")) {
-              if (p["picture"].startsWith("https://") ||
-                  p["picture"].startsWith("http://")) {
-                v.icon = p["picture"];
-              }
-            }
-          }
+      EventId? note;
+      try {
+        note = Nip19.encodeNote(
+            n.tags.firstWhere((element) => element[0] == "e")[1]);
+        if (note != null) {
+          List<TextNote> res = await relayRepository.getTextNotes(ids: [note]);
+          TextNote n2 = res[0];
+          v.nextMemoData = TimelineListItemData();
+          v.nextMemoData!.date = n2.createdAt;
+          v.nextMemoData!.body = n2.content;
+          v.nextMemoData!.cw = n2.nip36;
+          v.nextMemoData!.userName =
+              n2.autherMetadata?.displayName ?? n2.pubkey;
+          v.nextMemoData!.handle = "@${n2.autherMetadata?.name ?? ""}";
+          v.nextMemoData!.icon = n2.autherMetadata?.picture != null
+              ? await FetchImageInterface.getImageFromURL(
+                  n2.autherMetadata!.picture!)
+              : null;
 
           RegExp _urlReg = RegExp(
             r'https?://([\w-]+\.)+[\w-]+(/[\w-./?%&=#]*)?',
           );
-          String? url = _urlReg.firstMatch(event.content)?.group(0);
+          String? url = _urlReg.firstMatch(n2.content)?.group(0);
           if (url != null) {
             if (url.endsWith("png") ||
                 url.endsWith("jpg") ||
                 url.endsWith("jpeg") ||
                 url.endsWith("gif")) {
-              v.ogpImageUrl = url;
+              v.nextMemoData!.ogpImage =
+                  await FetchImageInterface.getImageFromURL(url);
             } else {
               try {
-                var ogpRes = await MetadataFetch.extract(url);
-                v.ogpImageUrl = ogpRes?.image;
-                v.ogpText = ogpRes?.title ?? "";
+                var ogpRes = await OGPMetadataInterface.getMetaDataFromURL(url);
+                v.nextMemoData!.ogpImage = ogpRes?.image;
+                v.nextMemoData!.ogpText = ogpRes?.title ?? "";
               } catch (e) {
                 //Do noting (Failed)
               }
             }
           }
-
-          RegExp _noteReg = RegExp(
-            r'nostr:note1([\w-]+)',
-          );
-          v.body = v.body.replaceAll(_noteReg, "");
-
-          String? note;
-          try {
-            note = event.tags.firstWhere((element) => element[0] == "e")[1];
-          } catch (e) {
-            // Do noting
-          }
-          if (note != null) {
-            final request = [
-              Filter(
-                kinds: [1],
-                limit: 1,
-                ids: [note],
-              )
-            ];
-            try {
-              final m = await relayRepository.oneshotRequest(request);
-              if (m != null) {
-                v.nextMemoData = TimelineListItemData();
-                v.nextMemoData!.date =
-                    DateTime.fromMillisecondsSinceEpoch(m.createdAt * 1000);
-                v.nextMemoData!.body = m.content;
-                v.nextMemoData!.handle = m.pubkey;
-
-                // NIP-36 Check
-                try {
-                  v.nextMemoData!.cw = m.tags.firstWhere(
-                      (element) => element[0] == "content-warning")[1];
-                } catch (e) {
-                  // Do noting
-                }
-
-                if (relayRepository.profiles.containsKey(m.pubkey)) {
-                  var p =
-                      jsonDecode(relayRepository.profiles[m.pubkey]!.content);
-                  if (p.containsKey("name")) {
-                    v.nextMemoData!.userName =
-                        p["displayName"] ?? p["display_name"] ?? "";
-                    v.nextMemoData!.handle = "@" + (p["name"] ?? "");
-                  }
-                  if (p.containsKey("picture")) {
-                    if (p["picture"].startsWith("https://") ||
-                        p["picture"].startsWith("http://")) {
-                      v.nextMemoData!.icon = p["picture"];
-                    }
-                  }
-
-                  RegExp _urlReg = RegExp(
-                    r'https?://([\w-]+\.)+[\w-]+(/[\w-./?%&=#]*)?',
-                  );
-                  String? url = _urlReg.firstMatch(m.content)?.group(0);
-                  if (url != null) {
-                    if (url.endsWith("png") ||
-                        url.endsWith("jpg") ||
-                        url.endsWith("jpeg") ||
-                        url.endsWith("gif")) {
-                      v.nextMemoData!.ogpImageUrl = url;
-                    } else {
-                      try {
-                        var ogpRes = await MetadataFetch.extract(url);
-                        v.nextMemoData!.ogpImageUrl = ogpRes?.image;
-                        v.nextMemoData!.ogpText = ogpRes?.title ?? "";
-                      } catch (e) {
-                        //Do noting (Failed)
-                      }
-                    }
-                  }
-                }
-              }
-            } catch (e) {
-              print("timeout");
-              //Do noting (timeout error)
-            }
-          }
-
-          timelineListItems.add(v);
-          //print(event.content);
-          //print(event.createdAt);
-
-          timelineListItems.sort(((a, b) => b.date.compareTo(a.date)));
-          notifyListeners();
         }
-      },
-          (subscriptionId) => {
-                // NO EOSE
-              });
-    });
+      } catch (e) {
+        // Do noting
+      }
+
+      timelineListItems.add(v);
+    }
+    timelineListItems.sort(((a, b) => b.date.compareTo(a.date)));
+    notifyListeners();
   }
 
   TimelineListItemData getTimelineItem(int index) {
+    if (index >= timelineListItems.length) {
+      return TimelineListItemData();
+    }
     return timelineListItems[index];
   }
 

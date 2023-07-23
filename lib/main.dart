@@ -8,7 +8,7 @@ import 'page/NotificationsPage.dart';
 import 'page/SettingsPage.dart';
 import 'page/ToolsPage.dart';
 import 'common/class.dart';
-import 'repository/RelayRepository.dart';
+import 'repository/relay_repository.dart';
 
 // flutter build web --release --base-href /nemesia/
 
@@ -70,24 +70,27 @@ class ScreenSwitcher extends StatelessWidget {
                 ),
               )),
               body: _screens[model.tabIndex],
-              bottomNavigationBar: BottomNavigationBar(
-                  currentIndex: model.tabIndex,
-                  onTap: (int index) {
-                    model.setTabPage(index);
-                  },
-                  type: BottomNavigationBarType.fixed,
-                  items: const <BottomNavigationBarItem>[
-                    BottomNavigationBarItem(
-                        icon: Icon(Icons.home), label: "Home"),
-                    BottomNavigationBarItem(
-                        icon: Icon(Icons.notifications), label: "Notification"),
-                    BottomNavigationBarItem(
-                        icon: Icon(Icons.person), label: "Me"),
-                    BottomNavigationBarItem(
-                        icon: Icon(Icons.build), label: "Tools"),
-                    BottomNavigationBarItem(
-                        icon: Icon(Icons.settings), label: "Settings"),
-                  ]),
+              bottomNavigationBar: Container(
+                  height: 70,
+                  child: BottomNavigationBar(
+                      currentIndex: model.tabIndex,
+                      onTap: (int index) {
+                        model.setTabPage(index);
+                      },
+                      type: BottomNavigationBarType.fixed,
+                      items: const <BottomNavigationBarItem>[
+                        BottomNavigationBarItem(
+                            icon: Icon(Icons.home), label: "Home"),
+                        BottomNavigationBarItem(
+                            icon: Icon(Icons.notifications),
+                            label: "Notification"),
+                        BottomNavigationBarItem(
+                            icon: Icon(Icons.person), label: "Me"),
+                        BottomNavigationBarItem(
+                            icon: Icon(Icons.build), label: "Tools"),
+                        BottomNavigationBarItem(
+                            icon: Icon(Icons.settings), label: "Settings"),
+                      ])),
               floatingActionButton: FloatingActionButton(
                 onPressed: () {
                   model.setTabPage(0);

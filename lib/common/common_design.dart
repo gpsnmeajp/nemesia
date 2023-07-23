@@ -111,7 +111,7 @@ class TimelineListItem extends StatelessWidget {
                                             ),
                                           )
                                         : Container(),
-                                    data.ogpImageUrl != null
+                                    data.ogpImage != null
                                         ? TimelineListItemOGP(data)
                                         : Container(),
                                   ]),
@@ -138,7 +138,9 @@ class TimelineListItemOGP extends StatelessWidget {
                 ConstrainedBox(
                   constraints:
                       const BoxConstraints(maxHeight: 500, maxWidth: 500),
-                  child: Image.network(data.ogpImageUrl!),
+                  child: data.ogpImage != null
+                      ? Image.memory(data.ogpImage!)
+                      : Container(),
                 ),
                 SizedBox(height: 5),
                 Text(data.ogpText!)
@@ -156,10 +158,10 @@ class TimelineListItemNameplate extends StatelessWidget {
     return Row(children: [
       ConstrainedBox(
         constraints: const BoxConstraints(maxHeight: 50, maxWidth: 50),
-        child: data.icon == ""
+        child: data.icon == null
             ? const Icon(Icons.person, size: 50)
-            : Image.network(
-                data.icon,
+            : Image.memory(
+                data.icon!,
                 filterQuality: FilterQuality.medium,
               ),
       ),
