@@ -316,6 +316,7 @@ mixin _$TextNote {
       throw _privateConstructorUsedError; // --- TextNote付属情報
   String? get nip36 => throw _privateConstructorUsedError;
   Metadata? get autherMetadata => throw _privateConstructorUsedError;
+  bool get repost => throw _privateConstructorUsedError;
 
   @JsonKey(ignore: true)
   $TextNoteCopyWith<TextNote> get copyWith =>
@@ -336,7 +337,8 @@ abstract class $TextNoteCopyWith<$Res> {
       String content,
       List<List<String>> tags,
       String? nip36,
-      Metadata? autherMetadata});
+      Metadata? autherMetadata,
+      bool repost});
 
   $MetadataCopyWith<$Res>? get autherMetadata;
 }
@@ -363,6 +365,7 @@ class _$TextNoteCopyWithImpl<$Res, $Val extends TextNote>
     Object? tags = null,
     Object? nip36 = freezed,
     Object? autherMetadata = freezed,
+    Object? repost = null,
   }) {
     return _then(_value.copyWith(
       rawJson: null == rawJson
@@ -401,6 +404,10 @@ class _$TextNoteCopyWithImpl<$Res, $Val extends TextNote>
           ? _value.autherMetadata
           : autherMetadata // ignore: cast_nullable_to_non_nullable
               as Metadata?,
+      repost: null == repost
+          ? _value.repost
+          : repost // ignore: cast_nullable_to_non_nullable
+              as bool,
     ) as $Val);
   }
 
@@ -433,7 +440,8 @@ abstract class _$$_TextNoteCopyWith<$Res> implements $TextNoteCopyWith<$Res> {
       String content,
       List<List<String>> tags,
       String? nip36,
-      Metadata? autherMetadata});
+      Metadata? autherMetadata,
+      bool repost});
 
   @override
   $MetadataCopyWith<$Res>? get autherMetadata;
@@ -459,6 +467,7 @@ class __$$_TextNoteCopyWithImpl<$Res>
     Object? tags = null,
     Object? nip36 = freezed,
     Object? autherMetadata = freezed,
+    Object? repost = null,
   }) {
     return _then(_$_TextNote(
       rawJson: null == rawJson
@@ -497,6 +506,10 @@ class __$$_TextNoteCopyWithImpl<$Res>
           ? _value.autherMetadata
           : autherMetadata // ignore: cast_nullable_to_non_nullable
               as Metadata?,
+      repost: null == repost
+          ? _value.repost
+          : repost // ignore: cast_nullable_to_non_nullable
+              as bool,
     ));
   }
 }
@@ -513,7 +526,8 @@ class _$_TextNote with DiagnosticableTreeMixin implements _TextNote {
       required this.content,
       required final List<List<String>> tags,
       required this.nip36,
-      required this.autherMetadata})
+      required this.autherMetadata,
+      required this.repost})
       : _relays = relays,
         _tags = tags;
 
@@ -553,10 +567,12 @@ class _$_TextNote with DiagnosticableTreeMixin implements _TextNote {
   final String? nip36;
   @override
   final Metadata? autherMetadata;
+  @override
+  final bool repost;
 
   @override
   String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
-    return 'TextNote(rawJson: $rawJson, relays: $relays, id: $id, pubkey: $pubkey, createdAt: $createdAt, content: $content, tags: $tags, nip36: $nip36, autherMetadata: $autherMetadata)';
+    return 'TextNote(rawJson: $rawJson, relays: $relays, id: $id, pubkey: $pubkey, createdAt: $createdAt, content: $content, tags: $tags, nip36: $nip36, autherMetadata: $autherMetadata, repost: $repost)';
   }
 
   @override
@@ -572,7 +588,8 @@ class _$_TextNote with DiagnosticableTreeMixin implements _TextNote {
       ..add(DiagnosticsProperty('content', content))
       ..add(DiagnosticsProperty('tags', tags))
       ..add(DiagnosticsProperty('nip36', nip36))
-      ..add(DiagnosticsProperty('autherMetadata', autherMetadata));
+      ..add(DiagnosticsProperty('autherMetadata', autherMetadata))
+      ..add(DiagnosticsProperty('repost', repost));
   }
 
   @override
@@ -590,7 +607,8 @@ class _$_TextNote with DiagnosticableTreeMixin implements _TextNote {
             const DeepCollectionEquality().equals(other._tags, _tags) &&
             (identical(other.nip36, nip36) || other.nip36 == nip36) &&
             (identical(other.autherMetadata, autherMetadata) ||
-                other.autherMetadata == autherMetadata));
+                other.autherMetadata == autherMetadata) &&
+            (identical(other.repost, repost) || other.repost == repost));
   }
 
   @override
@@ -604,7 +622,8 @@ class _$_TextNote with DiagnosticableTreeMixin implements _TextNote {
       content,
       const DeepCollectionEquality().hash(_tags),
       nip36,
-      autherMetadata);
+      autherMetadata,
+      repost);
 
   @JsonKey(ignore: true)
   @override
@@ -623,7 +642,8 @@ abstract class _TextNote implements TextNote {
       required final String content,
       required final List<List<String>> tags,
       required final String? nip36,
-      required final Metadata? autherMetadata}) = _$_TextNote;
+      required final Metadata? autherMetadata,
+      required final bool repost}) = _$_TextNote;
 
   @override // --- 生データ
   String get rawJson;
@@ -643,6 +663,8 @@ abstract class _TextNote implements TextNote {
   String? get nip36;
   @override
   Metadata? get autherMetadata;
+  @override
+  bool get repost;
   @override
   @JsonKey(ignore: true)
   _$$_TextNoteCopyWith<_$_TextNote> get copyWith =>

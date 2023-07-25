@@ -53,6 +53,7 @@ abstract class TextNote with _$TextNote {
     // --- TextNote付属情報
     required String? nip36,
     required Metadata? autherMetadata,
+    required bool repost,
   }) = _TextNote;
 }
 

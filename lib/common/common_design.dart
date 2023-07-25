@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../common/class.dart';
-import '../model/GlobalModel.dart';
+import '../model/HomeTimelineModel.dart';
 
 // スクロール設定
 class CustomScrollBehavior extends MaterialScrollBehavior {
@@ -77,7 +77,7 @@ class TimelineListItem extends StatelessWidget {
                                   style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.deepPurple),
                                   onPressed: () {
-                                    Provider.of<GlobalModel>(context,
+                                    Provider.of<HomeTimelineModel>(context,
                                             listen: false)
                                         .cwOpen(dataIndex, isChild);
                                   },
@@ -172,10 +172,9 @@ class TimelineListItemNameplate extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                  child: Text(
+              Text(
                 data.userName,
-              )),
+              ),
               Container(padding: const EdgeInsets.fromLTRB(10, 0, 0, 0)),
               Expanded(
                 child: Text(data.handle, overflow: TextOverflow.ellipsis),
@@ -199,24 +198,36 @@ class TimelineListItemBar extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(5, 0, 5, 0),
         child:
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          IconButton(
-              hoverColor: Colors.transparent,
-              splashColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-              onPressed: () {},
-              icon: Icon(Icons.reply_rounded)),
-          IconButton(
-              hoverColor: Colors.transparent,
-              splashColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-              onPressed: () {},
-              icon: Icon(Icons.repeat)),
-          IconButton(
-              hoverColor: Colors.transparent,
-              splashColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-              onPressed: () {},
-              icon: Icon(Icons.thumb_up_outlined)),
+          Row(children: [
+            IconButton(
+                hoverColor: Colors.transparent,
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+                onPressed: () {},
+                icon: Icon(Icons.reply_rounded)),
+          ]),
+          Row(children: [
+            IconButton(
+                hoverColor: Colors.transparent,
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+                onPressed: () {
+                  data.onRepost(data.id);
+                },
+                icon: Icon(data.reposted ? Icons.repeat_on : Icons.repeat)),
+          ]),
+          Row(children: [
+            IconButton(
+                hoverColor: Colors.transparent,
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+                onPressed: () {
+                  data.onLike(data.id);
+                },
+                icon: Icon(
+                    data.liked ? Icons.thumb_up : Icons.thumb_up_outlined)),
+            Text(data.likeCount.toString())
+          ]),
           IconButton(
               hoverColor: Colors.transparent,
               splashColor: Colors.transparent,

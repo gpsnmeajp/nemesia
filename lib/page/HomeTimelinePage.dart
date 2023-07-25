@@ -1,9 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../model/GlobalModel.dart';
+import '../model/HomeTimelineModel.dart';
 import '../common/common_design.dart';
 import '../common/class.dart';
+import './CommunicationDialogPage.dart';
 
 class HomeTimelinePage extends StatelessWidget {
   const HomeTimelinePage({super.key});
@@ -11,10 +12,14 @@ class HomeTimelinePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Consumer<GlobalModel>(
+      child: Consumer<HomeTimelineModel>(
           builder: (context, model, _) => RefreshIndicator(
               onRefresh: () async {
+                Navigator.push(context, CommunicationDialogPage());
                 await model.renewHomeTimeline();
+
+                if (!context.mounted) return;
+                Navigator.pop(context);
               },
               child: ListView.builder(
                   controller: model.homeTimelineScrollController,

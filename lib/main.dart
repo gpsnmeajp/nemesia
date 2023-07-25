@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:nemesia/page/CommunicationDialogPage.dart';
+import 'package:nemesia/page/SendDialogPage.dart';
 import 'package:provider/provider.dart';
-import 'model/GlobalModel.dart';
+import 'model/HomeTimelineModel.dart';
 import 'common/common_design.dart';
 import 'page/HomeTimelinePage.dart';
 import 'page/MyProfilePage.dart';
@@ -14,11 +16,23 @@ import 'repository/relay_repository.dart';
 
 const title = 'Nemesia for nostr';
 
+class FlutterErrorHolder {
+  static List<FlutterErrorDetails> errors = List.empty(growable: true);
+  static void add(FlutterErrorDetails details) {
+    errors.add(details);
+  }
+}
+
 // エントリーポイント
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  FlutterError.onError = (FlutterErrorDetails details) {
+    debugPrint(details.exception.toString());
+    debugPrint(details.stack.toString());
+  };
   RelayRepository();
   runApp(ChangeNotifierProvider(
-      create: (_) => GlobalModel(), child: const MyApp()));
+      create: (_) => HomeTimelineModel(), child: const MyApp()));
 }
 
 // トップレベル
@@ -37,7 +51,7 @@ class MyApp extends StatelessWidget {
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 800),
-              child: ScreenSwitcher())),
+              child: SafeArea(child: ScreenSwitcher()))),
     );
   }
 }
@@ -55,14 +69,33 @@ class ScreenSwitcher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<GlobalModel>(
+    return Consumer<HomeTimelineModel>(
         builder: (context, model, _) => Scaffold(
               appBar: AppBarWithBackground(
                   appBar: AppBar(
+                actions: [
+                  IconButton(
+                    onPressed: () => showDialog(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                              content: Text(
+                                  "Licence: https://github.com/gpsnmeajp/nemesia"),
+                            )),
+                    icon: Icon(Icons.home),
+                  )
+                ],
                 title: const Text(title),
                 backgroundColor: Colors.transparent,
                 flexibleSpace: InkWell(
-                  onTap: () {
+                  onTap: () async {
+                    if (model.homeTimelineScrollController.position.pixels <
+                        10) {
+                      Navigator.push(context, CommunicationDialogPage());
+                      await model.renewHomeTimeline();
+
+                      if (!context.mounted) return;
+                      Navigator.pop(context);
+                    }
                     model.homeTimelineScrollController.animateTo(0,
                         duration: const Duration(milliseconds: 300),
                         curve: Curves.easeInOut);
@@ -93,7 +126,7 @@ class ScreenSwitcher extends StatelessWidget {
                       ])),
               floatingActionButton: FloatingActionButton(
                 onPressed: () {
-                  model.setTabPage(0);
+                  Navigator.push(context, SendDialogPage());
                 },
                 tooltip: 'Increment',
                 child: const Icon(Icons.add),

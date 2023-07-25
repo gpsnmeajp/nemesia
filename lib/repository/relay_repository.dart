@@ -7,6 +7,7 @@ import 'package:nostr/nostr.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'nip07_mock.dart' if (dart.library.html) 'nip07_web.dart';
+import 'dart:io' if (dart.library.html) 'dart:html';
 
 import 'repository_interfaces.dart';
 part 'relay_repository.freezed.dart';
@@ -63,7 +64,7 @@ class RelayRepository implements RelayRepositoryInterface {
   ];
 
   // 秘密鍵(nullの場合、未格納のためNIP-07を使用する)
-  Keychain? keychain;
+  Keychain? _keychain;
 
   // イベント受信バッファ(サブスクID別、リレー別イベント)
   final Map<SubscriptionId, ReceivingEvents> _eventBuffer = {};
@@ -74,50 +75,96 @@ class RelayRepository implements RelayRepositoryInterface {
   // メタデータキャッシュ
   final Map<Pubkey, Metadata> _metadataCache = {};
 
+  // 通信開始済みチェック
+  bool _isConnected = false;
+
+  // 最終送受信時間
+  DateTime _lastCommunication = DateTime.now();
+
+  // ログハンドラー
+  Function(String)? _logHandler;
+
   // 名前付きコンストラクタ(プライベート)
   RelayRepository._() {
+    /*
+    Future.sync(() async {
+      setSelfKey(await File("C:\\nostr.txt").readAsString());
+      print("KEY OK");
+    });
+    */
+
     // 周期タイマー
-    Timer.periodic(const Duration(seconds: 15), _onPeriodicTimer);
+    Timer.periodic(const Duration(seconds: 3), _onPeriodicTimer);
+  }
+
+  // ログ
+  void log(String message) {
+    debugPrint(message);
+    _logHandler?.call(message);
+  }
+
+  void setLogHandler(Function(String message) handler) {
+    _logHandler = handler;
   }
 
   // 周期イベント処理
   void _onPeriodicTimer(Timer timer) async {
-    debugPrint("[onPeriodicTimer] Start");
-    // 接続状態チェックと、自動再接続
-    _webSocketChannelList.forEach((r, w) {
-      if (w.closeCode != null) {
-        // 既存の接続を閉じる
-        try {
-          w.sink.close();
-        } catch (e) {
-          // Do noting
-        }
+    log("[onPeriodicTimer] Start");
+    // 最終通信時間から10秒経ったら切断する
+    if (DateTime.now().difference(_lastCommunication).inSeconds > 10 &&
+        _isConnected) {
+      log("[onPeriodicTimer] auto close");
+      _disconnect();
+    }
 
-        // 接続を開始する
-        var s = WebSocketChannel.connect(Uri.parse(r));
-        s.stream.listen((message) {
-          // なにか受信した: 受信物はすべて同じところに流し込む
-          _onWebsocketReceived(r, message);
-        });
-        // 接続管理する
-        _webSocketChannelList[r] = s;
-      }
-    });
+    if (_isConnected) {
+      // 接続状態チェックと、自動再接続
+      _webSocketChannelList.forEach((r, w) {
+        if (w.closeCode != null) {
+          log("[onPeriodicTimer] reconnect $r");
+          // 既存の接続を閉じる
+          try {
+            w.sink.close();
+          } catch (e) {
+            // Do noting
+          }
+
+          // 接続を開始する
+          var s = WebSocketChannel.connect(Uri.parse(r));
+          s.stream.listen((message) {
+            // なにか受信した: 受信物はすべて同じところに流し込む
+            _onWebsocketReceived(r, message);
+          });
+          // 接続管理する
+          _webSocketChannelList[r] = s;
+        }
+      });
+    }
+  }
+
+  // 通信可能かチェック
+  Future<void> _checkConnection() async {
+    // もし通信が始まっていないなら
+    if (!_isConnected) {
+      // 接続を開始
+      await connect();
+    }
   }
 
   // 単発リクエストを実施
   Future<Map<EventId, EventWithRelays>?> _oneshotRequest(
       Filter filter, List<RelayUrl>? relays) async {
-    debugPrint("[oneshotRequest] Start");
+    log("[oneshotRequest] Start");
+
     var completer = Completer<Map<EventId, EventWithRelays>?>();
     var isEOSE = false;
 
     // リクエストを生成
     String subscriptionId = generate64RandomHexChars().substring(0, 32);
-    debugPrint("[oneshotRequest]$subscriptionId");
+    log("[oneshotRequest]$subscriptionId");
 
     // 完了時 or タイムアウト処理を追加
-    void onComplete() {
+    void onComplete() async {
       // すでに完了済みの場合無視(期限切れタイマーによるもの)
       if (completer.isCompleted) {
         return;
@@ -128,21 +175,19 @@ class RelayRepository implements RelayRepositoryInterface {
           (DateTime.now()
                   .difference(_eventBuffer[subscriptionId]!.lastReceived) <
               const Duration(milliseconds: 200))) {
-        debugPrint(
-            "[oneshotRequest] Contine: $subscriptionId ${_eventBuffer[subscriptionId]!.lastReceived}");
+        log("[oneshotRequest] Contine: $subscriptionId ${_eventBuffer[subscriptionId]!.lastReceived}");
         Future.delayed(const Duration(milliseconds: 200), onComplete);
         return;
       }
-      debugPrint("[onComplete] Start");
+      log("[onComplete] Start");
       // サブスク解除
       // サブスクリプションを停止
       _subscriptions.remove(subscriptionId);
-      _sendAllRelay(Close(subscriptionId).serialize());
+      await _sendAllRelay(Close(subscriptionId).serialize());
 
       // 終了状態を判定
       if (_eventBuffer[subscriptionId] != null) {
-        debugPrint(
-            "[oneshotRequest] On data: $subscriptionId  ${_eventBuffer[subscriptionId]!.lastReceived} ${DateTime.now()} ${isEOSE.toString()}");
+        log("[oneshotRequest] On data: $subscriptionId  ${_eventBuffer[subscriptionId]!.lastReceived} ${DateTime.now()} ${isEOSE.toString()}");
         // 最低一つは応答はあったので、対象の投稿を取り出す
         var eventsPerRelay = _eventBuffer[subscriptionId]!.eventsOnRelays;
         Map<EventId, EventWithRelays> events = {};
@@ -174,11 +219,11 @@ class RelayRepository implements RelayRepositoryInterface {
       // データがなかった時
       if (isEOSE) {
         // EOSEは来たがデータが1件もなかった(リレーに存在しないデータ)
-        debugPrint("[oneshotRequest] No data");
+        log("[oneshotRequest] No data");
         completer.complete(null);
       } else {
         // どのリレーからも応答がなかった(通信切断 or EOSE非対応リレーしかいない)
-        debugPrint("[oneshotRequest] Timeout");
+        log("[oneshotRequest] Timeout");
         completer.completeError("Timeout");
       }
     }
@@ -189,7 +234,7 @@ class RelayRepository implements RelayRepositoryInterface {
       filter: filter,
       eoseCallback: (String subscriptionId) {
         // EOSE
-        debugPrint("[oneshotRequest] EOSE: $subscriptionId");
+        log("[oneshotRequest] EOSE: $subscriptionId");
         isEOSE = true;
         // 200ms後に確定処理
         Future.delayed(const Duration(milliseconds: 200), () {
@@ -203,10 +248,10 @@ class RelayRepository implements RelayRepositoryInterface {
 
     if (relays != null) {
       for (var relayUrl in relays) {
-        _sendRelay(relayUrl, request.serialize());
+        await _sendRelay(relayUrl, request.serialize());
       }
     } else {
-      _sendAllRelay(request.serialize());
+      await _sendAllRelay(request.serialize());
     }
 
     // 3秒後に強制タイムアウト
@@ -221,7 +266,7 @@ class RelayRepository implements RelayRepositoryInterface {
   void _onWebsocketReceived(relayUrl, payload) async {
     // 文字列を受信した時
     if (payload is String) {
-      // debugPrint('[onWebsocketReceived] Received event($relayUrl): $payload');
+      // log('[onWebsocketReceived] Received event($relayUrl): $payload');
 
       // Web版ではEVENTは署名検証スキップする(負荷が非常に高いため)
       var data = jsonDecode(payload);
@@ -235,18 +280,16 @@ class RelayRepository implements RelayRepositoryInterface {
         // Subscriptionに存在するかチェック
         if (_subscriptions[e.subscriptionId] == null) {
           // 存在しないので(リレーが壊れてる?)無視する
-          debugPrint(
-              "[onWebsocketReceived] REJECT: not subscription ${e.subscriptionId}");
+          log("[onWebsocketReceived] REJECT: not subscription ${e.subscriptionId}");
           return;
         }
 
         var filter = _subscriptions[e.subscriptionId]!.filter;
 
-        // 対象のkindsか調べます
+        // 対象のkindsか調べます(リレー異常対策)
         if (!filter.kinds!.contains(e.kind)) {
           // 対象ではない
-          debugPrint(
-              "[onWebsocketReceived] REJECT: not kind ${e.kind}  ${e.subscriptionId}");
+          log("[onWebsocketReceived] REJECT: not kind ${e.kind}  ${e.subscriptionId}");
           return;
         }
 
@@ -254,8 +297,7 @@ class RelayRepository implements RelayRepositoryInterface {
         if (filter.authors != null) {
           // 対象ではない
           if (!filter.authors!.contains(e.pubkey)) {
-            debugPrint(
-                "[onWebsocketReceived] REJECT: not authors ${e.pubkey}  ${e.subscriptionId}");
+            log("[onWebsocketReceived] REJECT: not authors ${e.pubkey}  ${e.subscriptionId}");
             return;
           }
         }
@@ -264,8 +306,7 @@ class RelayRepository implements RelayRepositoryInterface {
         if (filter.ids != null) {
           // 対象ではない
           if (!filter.ids!.contains(e.id)) {
-            debugPrint(
-                "[onWebsocketReceived] REJECT: not ids ${e.id}  ${e.subscriptionId}");
+            log("[onWebsocketReceived] REJECT: not ids ${e.id}  ${e.subscriptionId}");
             return;
           }
         }
@@ -286,10 +327,13 @@ class RelayRepository implements RelayRepositoryInterface {
                 event: e,
                 json: jsonEncode(data[2])); // [1]にはsubscription IDがあるので
         _eventBuffer[e.subscriptionId!]!.lastReceived = DateTime.now();
-        debugPrint("OK ${e.subscriptionId}");
+        log("OK ${e.subscriptionId}");
+
+        // 最終通信時間を更新
+        _lastCommunication = DateTime.now();
         return;
       }
-      debugPrint('[onWebsocketReceived] Received event($relayUrl): $payload');
+      log('[onWebsocketReceived] Received event($relayUrl): $payload');
       //デシリアライズと、署名検証
       Message m = Message.deserialize(payload);
       switch (m.type) {
@@ -297,6 +341,8 @@ class RelayRepository implements RelayRepositoryInterface {
           // ここには来ない
           break;
         case "EOSE":
+          // 最終通信時間を更新
+          _lastCommunication = DateTime.now();
           // EOSE通知を取り出す
           SubscriptionId subscriptionId = jsonDecode(m.message as String)[0];
           // EOSEをイベントバッファ処理のトリガとする
@@ -304,33 +350,41 @@ class RelayRepository implements RelayRepositoryInterface {
           break;
         default:
           // NOTICE, エラーなど
-          debugPrint('Received event($relayUrl): $payload');
+          log('Received event($relayUrl): $payload');
           break;
       }
     }
   }
 
   // すべてのリレーに送信する
-  void _sendAllRelay(dynamic data) {
-    debugPrint("[_sendAllRelay] SendAll");
+  Future<void> _sendAllRelay(dynamic data) async {
+    log("[_sendAllRelay] SendAll");
+    await _checkConnection();
     _webSocketChannelList.forEach((r, w) {
       w.sink.add(data);
     });
+
+    // 最終通信時間を更新
+    _lastCommunication = DateTime.now();
   }
 
   // 特定ののリレーに送信する
-  void _sendRelay(RelayUrl url, dynamic data) {
-    debugPrint("[_sendRelay] Send");
+  Future<void> _sendRelay(RelayUrl url, dynamic data) async {
+    log("[_sendRelay] Send");
+    await _checkConnection();
     _webSocketChannelList[url]?.sink.add(data);
+
+    // 最終通信時間を更新
+    _lastCommunication = DateTime.now();
   }
 
   // 状況に応じて取得手段を使い分けて、NIP-19公開鍵を取得
   Future<Pubkey?> getMyPubkey() async {
     late var pubkeyHex;
-    if (keychain == null) {
+    if (_keychain == null) {
       pubkeyHex = await Nip07.getPublicKey();
     } else {
-      pubkeyHex = keychain?.public;
+      pubkeyHex = _keychain?.public;
     }
     if (pubkeyHex == null) {
       return null;
@@ -341,7 +395,7 @@ class RelayRepository implements RelayRepositoryInterface {
   // 状況に応じて署名手段を使い分けて、署名して送信
   Future<void> signAndSend(
       int kind, List<List<String>> tags, String content) async {
-    debugPrint("[signAndSend] Start");
+    log("[signAndSend] Start");
 
     var pubkey = await getMyPubkey();
     if (pubkey == null) {
@@ -355,7 +409,7 @@ class RelayRepository implements RelayRepositoryInterface {
     event.tags = tags;
     event.pubkey = Nip19.decodePubkey(pubkey);
 
-    if (keychain == null) {
+    if (_keychain == null) {
       Nip07Event nip07 = Nip07Event(
         created_at: event.createdAt,
         pubkey: event.pubkey,
@@ -374,26 +428,33 @@ class RelayRepository implements RelayRepositoryInterface {
       event.sig = result.sig;
     } else {
       event.id = event.getEventId();
-      event.sig = event.getSignature(keychain!.private);
+      event.sig = event.getSignature(_keychain!.private);
     }
 
     if (!event.isValid()) {
       throw Error();
     }
 
-    _sendAllRelay(event.serialize());
+    await _sendAllRelay(event.serialize());
+  }
+
+  // 通信切断
+  Future<void> _disconnect() async {
+    log("[connect] _disconnect");
+    _webSocketChannelList.forEach((r, w) {
+      w.sink.close();
+    });
+    _webSocketChannelList.clear();
+    _isConnected = false;
   }
 
   // -----------------------
 
   @override
   Future<void> connect() async {
-    debugPrint("[connect] Start");
+    log("[connect] Start");
     // すでに接続済みなら全部切断する
-    _webSocketChannelList.forEach((r, w) {
-      w.sink.close();
-    });
-    _webSocketChannelList.clear();
+    _disconnect();
 
     // 接続を開始する
     for (var r in _relays) {
@@ -405,7 +466,11 @@ class RelayRepository implements RelayRepositoryInterface {
       // 接続管理する
       _webSocketChannelList[r] = w;
     }
-    debugPrint("[connect] Connected");
+    log("[connect] Connected");
+    _isConnected = true;
+
+    // 最終通信時間を更新
+    _lastCommunication = DateTime.now();
 
     // 公開鍵の初回取得処理(NIP-07キャッシュを兼ねて)
     await getMyPubkey();
@@ -424,18 +489,20 @@ class RelayRepository implements RelayRepositoryInterface {
 
   @override
   void setSelfKey(String? privateKey) {
-    debugPrint("[setSelfKey] Start");
+    log("[setSelfKey] Start");
     if (privateKey == null) {
       // NIP-07に任せる
-      keychain = null;
+      _keychain = null;
+      log("[setSelfKey] NIP-07");
       return;
     }
     var privKey = Nip19.decodePrivkey(privateKey);
     if (privKey != "") {
-      keychain = Keychain(privKey);
+      _keychain = Keychain(privKey);
     } else {
       throw ArgumentError("not private key");
     }
+    log("[setSelfKey] OK");
   }
 
   @override
@@ -449,7 +516,7 @@ class RelayRepository implements RelayRepositoryInterface {
     int? limit,
     List<String>? relays,
   }) async {
-    debugPrint("[getTextNotes] Start");
+    log("[getTextNotes] Start");
     List<String>? idsHex;
     List<String>? authersHex;
     if (ids != null) {
@@ -461,7 +528,7 @@ class RelayRepository implements RelayRepositoryInterface {
 
     var events = await _oneshotRequest(
         Filter(
-          kinds: [1],
+          kinds: [1, 6],
           ids: idsHex,
           authors: authersHex,
           e: e,
@@ -485,33 +552,60 @@ class RelayRepository implements RelayRepositoryInterface {
       List<TextNote> notes = List.empty(growable: true);
       events.forEach((EventId id, EventWithRelays event) {
         var e = event.event;
-        String? nip36;
-        try {
-          nip36 = e.event.tags
-              .firstWhere((element) => element[0] == "content-warning")[1];
-        } catch (e) {
-          // Do noting
+        if (e.event.kind == 1) {
+          String? nip36;
+          try {
+            nip36 = e.event.tags
+                .firstWhere((element) => element[0] == "content-warning")[1];
+          } catch (e) {
+            // Do noting
+          }
+          try {
+            var note = TextNote(
+              // --- 生データ
+              rawJson: e.json,
+              relays: event.relays,
+              // --- 基本情報
+              id: Nip19.encodeNote(e.event.id), // NIP-19
+              pubkey: Nip19.encodePubkey(e.event.pubkey), // NIP-19
+              createdAt:
+                  DateTime.fromMillisecondsSinceEpoch(e.event.createdAt * 1000),
+              // --- TextNote基本情報
+              content: e.event.content,
+              tags: e.event.tags,
+              // --- TextNote付属情報
+              nip36: nip36,
+              autherMetadata: metadatas[e.event.pubkey],
+              repost: false,
+            );
+            notes.add(note);
+          } catch (e) {
+            log("[getTextNotes] $e");
+          }
         }
-        try {
-          var note = TextNote(
-            // --- 生データ
-            rawJson: e.json,
-            relays: event.relays,
-            // --- 基本情報
-            id: Nip19.encodeNote(e.event.id), // NIP-19
-            pubkey: Nip19.encodePubkey(e.event.pubkey), // NIP-19
-            createdAt:
-                DateTime.fromMillisecondsSinceEpoch(e.event.createdAt * 1000),
-            // --- TextNote基本情報
-            content: e.event.content,
-            tags: e.event.tags,
-            // --- TextNote付属情報
-            nip36: nip36,
-            autherMetadata: metadatas[e.event.pubkey],
-          );
-          notes.add(note);
-        } catch (e) {
-          debugPrint("[getTextNotes] $e");
+        if (e.event.kind == 6) {
+          try {
+            var note = TextNote(
+              // --- 生データ
+              rawJson: e.json,
+              relays: event.relays,
+              // --- 基本情報
+              id: Nip19.encodeNote(e.event.id), // NIP-19
+              pubkey: Nip19.encodePubkey(e.event.pubkey), // NIP-19
+              createdAt:
+                  DateTime.fromMillisecondsSinceEpoch(e.event.createdAt * 1000),
+              // --- TextNote基本情報
+              content: "",
+              tags: e.event.tags,
+              // --- TextNote付属情報
+              nip36: null,
+              autherMetadata: metadatas[e.event.pubkey],
+              repost: true,
+            );
+            notes.add(note);
+          } catch (e) {
+            log("[getTextNotes] $e");
+          }
         }
       });
 
@@ -526,7 +620,7 @@ class RelayRepository implements RelayRepositoryInterface {
 
   @override
   Future<List<Pubkey>> getContactList(String pubkey) async {
-    debugPrint("[getContactList] Start");
+    log("[getContactList] Start");
     var events = await _oneshotRequest(
         Filter(
           kinds: [3],
@@ -563,7 +657,7 @@ class RelayRepository implements RelayRepositoryInterface {
 
   @override
   Future<Map<Pubkey, Metadata>> getMetadatas(List<String>? pubkeys) async {
-    debugPrint("[getMetadatas] Start");
+    log("[getMetadatas] Start");
     var output = <Pubkey, Metadata>{};
 
     // 対象がない場合、自分を対象にする
@@ -587,7 +681,7 @@ class RelayRepository implements RelayRepositoryInterface {
         nonCachedPubkeys.add(p);
       }
     }
-    debugPrint("[getMetadatas] Cache hit: ${output.length}");
+    log("[getMetadatas] Cache hit: ${output.length}");
 
     // 取得
     var autherevents = await _oneshotRequest(
@@ -622,7 +716,7 @@ class RelayRepository implements RelayRepositoryInterface {
         output[e.event.event.pubkey] = metadata;
         _metadataCache[e.event.event.pubkey] = metadata; //キャッシュにも保存
       } catch (e) {
-        debugPrint("[getMetadatas] $e");
+        log("[getMetadatas] $e");
       }
     });
 
@@ -631,7 +725,11 @@ class RelayRepository implements RelayRepositoryInterface {
 
   @override
   Future<void> postMyTextNote(String content, List<List<String>> tags) async {
-    debugPrint("[postMyTextNote] Start");
+    log("[postMyTextNote] Start");
+    if (content.isEmpty) {
+      log("content is empty");
+      return;
+    }
     await signAndSend(1, tags, content);
   }
 
@@ -642,7 +740,7 @@ class RelayRepository implements RelayRepositoryInterface {
     required String reaction,
     String? emojiUrl,
   }) async {
-    debugPrint("[postReaction] Start");
+    log("[postReaction] Start");
     List<List<String>> tags = List.empty(growable: true);
     tags.add(["e", Nip19.decodeNote(noteId)]);
     tags.add(["p", Nip19.decodePubkey(pubkey)]);
@@ -654,7 +752,7 @@ class RelayRepository implements RelayRepositoryInterface {
 
   @override
   Future<void> postRepost(TextNote textNote) async {
-    debugPrint("[postRepost] Start");
+    log("[postRepost] Start");
     await signAndSend(
         6,
         [
